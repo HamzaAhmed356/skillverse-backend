@@ -12,6 +12,7 @@ import userRoutes from "./Routes/userRoutes.js";
 import gigRoutes from "./Routes/gigRoute.js";
 import loginRoute from "./Routes/loginRoute.js";
 import chatRoutes from "./Routes/chatRoutes.js";
+import orderRoute from "./Routes/orderRoute.js";
 const app = express();
 
 // Middlewares
@@ -44,6 +45,7 @@ app.use("/gig", gigRoutes);
 app.use("/api/freelancers", freelancerRoutes);
 app.use("/login", loginRoute);
 app.use("/chat/", chatRoutes);
+app.use("/orders", orderRoute);
 // Google OAuth
 app.get(
   "/auth/google",

@@ -1,6 +1,7 @@
 import express from "express";
 import User from "../Models/userschema.js";
-
+import cloudinary from "../Config/cloudinary.js";
+import upload from "../middleware/upload.js";
 const router = express.Router();
 
 // 🔹 GET USER BY ID (only required fields)
@@ -47,4 +48,32 @@ router.put("/user/update/:id", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+router.post(
+  "/upload-profile-image",
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      // Convert buffer to base64
+      const b64 = Buffer.from(req.file.buffer).toString("base64");
+      const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: "profile",
+      });
+
+      res.status(200).json({
+        url: result.secure_url,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Image upload failed" });
+    }
+  },
+);
+
 export default router;

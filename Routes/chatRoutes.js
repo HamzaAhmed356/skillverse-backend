@@ -14,6 +14,7 @@ import {
   newMessage,
   getMessage,
 } from "../controllers/chat-controllers/message-controller.js";
+import { handleChat } from "../controllers/chat-controllers/chatBot.js";
 
 const router = express.Router();
 
@@ -25,5 +26,6 @@ router.post("/message/add", newMessage); //add message
 router.get("/message/get/:id", getMessage); //get Message
 router.get("/conversations/get/:id", getAllConversation);
 router.get("/user/:otherUserId", getConversationUserData);
+router.post("/api/chat", handleChat);
 //router.post("/file/upload", upload.single("file"), uploadFile);
 export default router;
