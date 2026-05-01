@@ -4,6 +4,7 @@ import {
   getBuyerOrders,
   getSellerOrders,
   updateOrderStatus,
+  confirmOrder,
 } from "../controllers/orderController.js";
 
 const router = express.Router();
@@ -13,5 +14,6 @@ router.post("/", createOrder);
 router.get("/buyer", getBuyerOrders);
 router.get("/seller", getSellerOrders);
 router.patch("/:id/status", updateOrderStatus);
+router.post("/confirm", confirmOrder);
 
 export default router;

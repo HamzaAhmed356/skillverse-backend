@@ -1,5 +1,6 @@
 import "dotenv/config"; // automatically loads .env
 import express from "express";
+import Stripe from "stripe";
 import cors from "cors";
 import session from "express-session";
 import passport from "passport";
@@ -21,7 +22,7 @@ const corsOptions = {
   origin: "http://localhost:3000", // frontend URL
   credentials: true, // allow cookies to be sent
 };
-
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(

@@ -19,65 +19,56 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
-    // ===== ORDER DETAILS (Snapshotted from Frontend) =====
-    packageName: {
-      type: String, // e.g., "Basic", "Standard", "Premium"
-      required: true,
-    },
-    packagePrice: {
-      type: Number,
-      required: true,
-    },
-    serviceFee: {
-      type: Number,
-      required: true,
-    },
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
-    deliveryTime: {
-      type: Number, // In days
+    // ===== STRIPE =====
+    sellerStripeAccountId: {
+      type: String,
       required: true,
     },
 
-    // ===== STATUS TRACKING =====
+    paymentIntentId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
+    // ===== ORDER DETAILS =====
+    packageName: String,
+    packagePrice: Number,
+    serviceFee: Number,
+    totalAmount: Number,
+    deliveryTime: Number,
+
+    // ===== PLATFORM SPLIT =====
+    platformFee: Number,
+    sellerEarning: Number,
+
+    // ===== STATUS =====
     status: {
       type: String,
       enum: [
-        "pending",
+        "paid", // created after payment
         "active",
         "delivered",
         "completed",
         "cancelled",
         "refunded",
-        "new",
       ],
+      default: "paid",
+    },
+
+    // ===== TRANSFER =====
+    transferId: String,
+    transferStatus: {
+      type: String,
+      enum: ["pending", "paid", "failed"],
       default: "pending",
     },
 
-    // ===== PAYMENT INFO =====
-    paymentIntentId: {
-      type: String, // Useful if using Stripe/PayPal to track the transaction
-      unique: true,
-      sparse: true,
-    },
-    paymentStatus: {
-      type: String,
-      enum: ["unpaid", "paid", "failed"],
-      default: "unpaid",
-    },
-
-    // ===== MILESTONES =====
-    deliveredAt: {
-      type: Date,
-    },
-    completedAt: {
-      type: Date,
-    },
+    // ===== TIMELINES =====
+    deliveredAt: Date,
+    completedAt: Date,
   },
   { timestamps: true },
 );
 
-const Order = mongoose.models.Order || mongoose.model("Order", orderSchema);
-export default Order;
+export default mongoose.models.Order || mongoose.model("Order", orderSchema);

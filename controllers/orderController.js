@@ -1,18 +1,28 @@
 import Order from "../Models/orderSchema.js";
 import Gig from "../Models/gigschema.js";
+import Stripe from "stripe";
+import dotenv from "dotenv";
+import User from "../Models/userSchema.js";
+dotenv.config();
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+/**
+ * 1. CREATE STRIPE CHECKOUT SESSION
+ * This starts the payment process and returns a Stripe URL to the frontend.
+ */
 export const createOrder = async (req, res) => {
   try {
-    const { gigId, buyerId, package: packageNameFromFrontend } = req.body;
+    const { gigId, buyerId, package: packageName, image } = req.body;
 
-    // 1. Fetch the Gig to get pricing and seller details
+    // Fetch the Gig to get pricing and seller details
     const gig = await Gig.findById(gigId);
     if (!gig) {
       return res.status(404).json({ success: false, message: "Gig not found" });
     }
 
-    // 2. Extract the correct package data (case-insensitive check)
-    const selectedPackageKey = packageNameFromFrontend.toLowerCase(); // "basic", "standard", or "premium"
+    // Extract the correct package data
+    const selectedPackageKey = packageName.toLowerCase();
     const packageData = gig.packages[selectedPackageKey];
 
     if (!packageData) {
@@ -21,45 +31,147 @@ export const createOrder = async (req, res) => {
         .json({ success: false, message: "Invalid package selected" });
     }
 
-    // 3. Calculate Fees
+    // Calculate Totals (Stripe requires amounts in CENTS)
     const packagePrice = packageData.price;
-    // Service fee: 0.01% (Note: 0.01% is 0.0001 as a decimal. If you meant 1%, use 0.01)
-    const serviceFee = Number((packagePrice * 0.0001).toFixed(2));
+    const serviceFee = Number((packagePrice * 0.01).toFixed(2)); // 1% fee
     const totalAmount = packagePrice + serviceFee;
+    const unitAmountInCents = Math.round(totalAmount * 100);
 
-    // 4. Create the Order
-    const newOrder = new Order({
+    // Create Stripe Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `${gig.title} (${packageName} Package)`,
+              images: [image || (gig.images && gig.images[0])],
+            },
+            unit_amount: unitAmountInCents,
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      // Metadata allows us to keep track of our data while it's on Stripe's servers
+      metadata: {
+        gigId: gigId.toString(),
+        buyerId: buyerId.toString(),
+        sellerId: gig.creator.toString(),
+        packageName: packageName,
+        packagePrice: packagePrice.toString(),
+        serviceFee: serviceFee.toString(),
+        totalAmount: totalAmount.toString(),
+        deliveryTime: packageData.deliveryTime.toString(),
+      },
+      success_url: `http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `http://localhost:3000/cancel`,
+    });
+
+    // Send the URL back to frontend for redirection
+    res.status(200).json({
+      success: true,
+      url: session.url,
+    });
+  } catch (error) {
+    console.error("Stripe Session Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 2. CONFIRM ORDER & SAVE TO DB
+ * This runs after the user returns from Stripe. It verifies payment and creates the DB record.
+ */
+export const confirmOrder = async (req, res) => {
+  try {
+    const { session_id } = req.body;
+
+    // 1. Retrieve the session from Stripe
+    const session = await stripe.checkout.sessions.retrieve(session_id);
+
+    if (session.payment_status !== "paid") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Payment not verified" });
+    }
+
+    // 2. Prevent duplicate processing
+    const existingOrder = await Order.findOne({ paymentIntentId: session.id });
+    if (existingOrder) {
+      return res.status(200).json({ success: true, data: existingOrder });
+    }
+
+    // 3. Extract metadata
+    const {
       gigId,
       buyerId,
-      sellerId: gig.creator,
-      packageName: packageNameFromFrontend, // "Basic", "Standard", etc.
+      sellerId,
+      packageName,
       packagePrice,
       serviceFee,
       totalAmount,
-      deliveryTime: packageData.deliveryTime,
-      paymentIntentId: `MOCK_PI_${Date.now()}`, // Placeholder until Stripe integration
+      deliveryTime,
+    } = session.metadata;
+
+    const originalPrice = parseFloat(packagePrice);
+
+    /**
+     * 4. CALCULATE SELLER EARNINGS
+     * Logic: Deduct 1% Platform Fee from the package price.
+     * Example: $100 package -> $1 fee -> $99 to Seller Pending Balance
+     */
+    const platformFeeDeduction = originalPrice * 0.01;
+    const sellerNetEarnings = parseFloat(
+      (originalPrice - platformFeeDeduction).toFixed(2),
+    );
+
+    // 5. Save the Order to MongoDB
+    const newOrder = new Order({
+      gigId,
+      buyerId,
+      sellerId,
+      packageName,
+      packagePrice: originalPrice,
+      serviceFee: parseFloat(serviceFee),
+      totalAmount: parseFloat(totalAmount),
+      deliveryTime: parseInt(deliveryTime),
+      paymentIntentId: session.id,
       paymentStatus: "paid",
       status: "active",
+      sellerStripeAccountId: "NOT_APPLICABLE",
     });
 
     const savedOrder = await newOrder.save();
 
-    // 5. Update Gig stats (Increment total orders)
+    // 6. Update Gig Stats (Total Orders)
     await Gig.findByIdAndUpdate(gigId, { $inc: { totalOrders: 1 } });
 
+    /**
+     * 7. UPDATE SELLER PENDING BALANCE
+     * We add the net amount (Price minus 1% platform fee)
+     */
+    await User.findByIdAndUpdate(sellerId, {
+      $inc: { PendingBalance: sellerNetEarnings },
+    });
+
+    // 8. Final Response
     res.status(201).json({
       success: true,
-      message: "Order placed successfully",
+      message: "Order confirmed. Pending balance updated (1% fee deducted).",
       data: savedOrder,
     });
   } catch (error) {
-    console.error("Order Creation Error:", error);
+    console.error("Confirmation Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+/**
+ * 3. GET BUYER ORDERS
+ */
 export const getBuyerOrders = async (req, res) => {
   try {
-    // For now, we expect buyerId in query: /api/orders/buyer?buyerId=123
     const { buyerId } = req.query;
     const orders = await Order.find({ buyerId })
       .populate("gigId", "title images")
@@ -72,9 +184,11 @@ export const getBuyerOrders = async (req, res) => {
   }
 };
 
+/**
+ * 4. GET SELLER ORDERS
+ */
 export const getSellerOrders = async (req, res) => {
   try {
-    // For now, we expect sellerId in query: /api/orders/seller?sellerId=456
     const { sellerId } = req.query;
     const orders = await Order.find({ sellerId })
       .populate("gigId", "title images")
@@ -87,6 +201,9 @@ export const getSellerOrders = async (req, res) => {
   }
 };
 
+/**
+ * 5. UPDATE STATUS
+ */
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;

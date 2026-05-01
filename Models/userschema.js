@@ -77,6 +77,18 @@ const userSchema = new mongoose.Schema(
       enum: ["client", "freelancer", "both"],
       default: "client",
     },
+    availableBalance: {
+      type: Number,
+      default: 0.0,
+      min: 0,
+      set: (v) => parseFloat(v.toFixed(2)), // keeps 2 decimal places
+    },
+    PendingBalance: {
+      type: Number,
+      default: 0.0,
+      min: 0,
+      set: (v) => parseFloat(v.toFixed(2)), // keeps 2 decimal places
+    },
 
     niche: [String],
 
