@@ -1,5 +1,5 @@
 import express from "express";
-import { loginAdmin } from "../controllers/adminController.js";
+import { loginAdmin, toggleBanUser } from "../controllers/adminController.js";
 import adminAuth from "../middleware/adminAuth.js";
 import {
   getAdminDashboard,
@@ -11,5 +11,6 @@ router.post("/login", loginAdmin);
 //protected admin route
 router.get("/dashboard", adminAuth, getAdminDashboard);
 router.get("/users", adminAuth, getAllUsers);
+router.patch("/users/:id/ban", adminAuth, toggleBanUser);
 
 export default router;

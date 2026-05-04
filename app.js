@@ -16,6 +16,8 @@ import chatRoutes from "./Routes/chatRoutes.js";
 import orderRoute from "./Routes/orderRoute.js";
 import adminRoutes from "./Routes/adminRoutes.js";
 import forgotRoutes from "./Routes/forgotRoutes.js";
+import reviewRoutes from "./Routes/reviewRoutes.js";
+
 const app = express();
 
 // Middlewares
@@ -51,6 +53,7 @@ app.use("/chat/", chatRoutes);
 app.use("/orders", orderRoute);
 app.use("/admin", adminRoutes);
 app.use("/password", forgotRoutes);
+app.use("/reviews", reviewRoutes);
 // Google OAuth
 app.get(
   "/auth/google",
